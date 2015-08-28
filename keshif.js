@@ -1472,7 +1472,7 @@ kshf.RecordDisplay.prototype = {
     /** -- */
     refreshAdjustSortColumnWidth: function(){
         this.DOM.adjustSortColumnWidth.style("left",
-            (this.sortColWidth-2)+(this.showRank?13:0)+"px")
+            (this.sortColWidth-2)+(this.showRank?15:0)+"px")
     },
     /** -- */
     setShowRank: function(v){
@@ -2163,7 +2163,7 @@ kshf.Browser = function(options){
 
     this.DOM.attributePanel = this.DOM.root.append("div").attr("class","panel attributePanel");
     var xx= this.DOM.attributePanel.append("div").attr("class","attributePanelHeader");
-    xx.append("span").text("Available attributes");
+    xx.append("span").text("Available Attributes");
     xx.append("span").attr("class","addAttrib fa fa-plus")
         .each(function(){
             this.tipsy = new Tipsy(this, {
@@ -2181,7 +2181,7 @@ kshf.Browser = function(options){
         .each(function(){
             this.tipsy = new Tipsy(this, {
                 gravity: "e",
-                title: function(){ return "Hide panel"; }
+                title: function(){ return "Close panel"; }
             })
         })
         .on("mouseover",function(){ this.tipsy.show(); })
@@ -2246,13 +2246,9 @@ kshf.Browser.prototype = {
         summary.removeFromPanel();
     },
     /** -- */
-    getPrimaryItems: function(){
-        return kshf.dt[this.primaryTableName];
-    },
-    /** -- */
     getAttribTypeFromFunc: function(attribFunc){
         var type = null;
-        this.getPrimaryItems().some(function(item,i){
+        this.items.some(function(item,i){
             var item=attribFunc.call(item.data,item);
             if(item===null) return false;
             if(item===undefined) return false;
@@ -2636,7 +2632,7 @@ kshf.Browser.prototype = {
     insertSourceBox: function(){
         var me=this;
         var x,y,z;
-        var source_type="spreadsheet";
+        var source_type="GoogleSheet";
         var sourceURL=null, sourceSheet="";
 
         var readyToLoad=function(){
@@ -2652,16 +2648,22 @@ kshf.Browser.prototype = {
 
         x = source_wrapper.append("div").attr("class","offpoofff");
 
-        x.append("span").attr("class","source_from").text("Google Spreadsheet").attr("source_type","spreadsheet");
-        x.append("span").attr("class","source_from").text("Google Drive Folder").attr("source_type","folder");
+        x.append("span").attr("class","source_from").text("Google Sheet").attr("source_type","GoogleSheet");
+        x.append("span").attr("class","source_from").text("Google Drive Folder").attr("source_type","GoogleDrive");
+        x.append("span").attr("class","source_from").text("Dropbox Folder").attr("source_type","Dropbox");
+        x.append("span").attr("class","source_from").text("Local File").attr("source_type","LocalFile");
 
         x.selectAll(".source_from").on("click",function(){
             source_type=this.getAttribute("source_type");
             me.DOM.infobox_source.attr("selected_source_type",source_type);
-            gdocLink.attr("placeholder",(source_type==="folder")?
-                'https://******.googledrive.com/host/**************/':
-                'https://docs.google.com/spreadsheets/d/**************'
-            );
+            var placeholder;
+            switch(source_type){
+                case "GoogleSheet": placeholder = 'https://docs.google.com/spreadsheets/d/**************'; break;
+                case "GoogleDrive": placeholder = 'https://******.googledrive.com/host/**************/'; break;
+                case "Dropbox": placeholder = "https://dl.dropboxusercontent.com/u/**************/";
+            }
+            
+            gdocLink.attr("placeholder",placeholder);
         });
 
         x = source_wrapper.append("div");
@@ -2672,7 +2674,7 @@ kshf.Browser.prototype = {
             .on("keyup",function(){
                 gdocLink_ready.style("opacity",this.value===""?"0":"1");
                 var input = this.value;
-                if(source_type==="spreadsheet"){
+                if(source_type==="GoogleSheet"){
                     var firstIndex = input.indexOf("docs.google.com/spreadsheets/d/");
                     if(firstIndex!==-1){
                         var input = input.substr(firstIndex+31); // focus after the base url
@@ -2688,7 +2690,7 @@ kshf.Browser.prototype = {
                         gdocLink_ready.attr("ready",false);
                     }
                 }
-                if(source_type==="folder"){
+                if(source_type==="GoogleDrive"){
                     var firstIndex = input.indexOf(".googledrive.com/host/");
                     if(firstIndex!==-1){
                         // Make sure last character is "/"
@@ -2700,6 +2702,21 @@ kshf.Browser.prototype = {
                         gdocLink_ready.attr("ready",false);
                     }
                 }
+                if(source_type==="Dropbox"){
+                    var firstIndex = input.indexOf("dl.dropboxusercontent.com/");
+                    if(firstIndex!==-1){
+                        // Make sure last character is "/"
+                        if(input[input.length-1]!=="/") input+="/";
+                        sourceURL = input;
+                        gdocLink_ready.attr("ready",true);
+                    } else{
+                        sourceURL = null;
+                        gdocLink_ready.attr("ready",false);
+                    }
+                }
+                if(source_type==="LocalFile"){
+                    // TODO
+                }
                 actionButton.attr("disabled",!readyToLoad());
             });
 
@@ -2707,10 +2724,14 @@ kshf.Browser.prototype = {
                 .each(function(summary){
                     this.tipsy = new Tipsy(this, {
                         gravity: 's', title: function(){
-                            if(source_type==="spreadsheet")
-                                return "The link to your Google Spreadsheet";
-                            if(source_type==="folder")
+                            if(source_type==="GoogleSheet")
+                                return "The link to your Google Sheet";
+                            if(source_type==="GoogleDrive")
                                 return "The link to *hosted* Google Drive folder";
+                            if(source_type==="Dropbox")
+                                return "The link to your *Public* Dropbox folder";
+                            if(source_type==="LocalFile")
+                                return "Select your file or drag & drop into the field";
                         }
                     });
                 })
@@ -2733,9 +2754,11 @@ kshf.Browser.prototype = {
                         //gravity: 's', title: function(){ return "Your document may have multiple sheets.<br>Provide the name of the main sheet"; }
                         gravity: 's', title: function(){
                             var v;
-                            if(source_type==="spreadsheet")
-                                v="The name of the data sheet in the spreadsheet.";
-                            if(source_type==="folder")
+                            if(source_type==="GoogleSheet")
+                                v="The name of the data sheet in your Google Sheet.";
+                            if(source_type==="GoogleDrive")
+                                v="The file name in the folder.";
+                            if(source_type==="Dropbox")
                                 v="The file name in the folder.";
                             v+="<br>Also describes what each data row represents"
                             return v;
@@ -2827,13 +2850,27 @@ kshf.Browser.prototype = {
                     me.showAttributes();
                     if(readyCb_pre) readyCb_pre.call(this,this);
                 }
-                if(source_type==="spreadsheet"){
+                if(source_type==="GoogleSheet"){
                     me.loadSource({
                         gdocId: sourceURL,
                         sheets: [ {name:sourceSheet, id:sheetID} ]
                     });
                 }
-                if(source_type==="folder"){
+                if(source_type==="GoogleDrive"){
+                    me.loadSource({
+                        dirPath: sourceURL,
+                        fileType: DOMfileType[0][0].value,
+                        sheets: [ {name:sourceSheet, id:sheetID} ]
+                    });
+                }
+                if(source_type==="Dropbox"){
+                    me.loadSource({
+                        dirPath: sourceURL,
+                        fileType: DOMfileType[0][0].value,
+                        sheets: [ {name:sourceSheet, id:sheetID} ]
+                    });
+                }
+                if(source_type==="LocalFile"){
                     me.loadSource({
                         dirPath: sourceURL,
                         fileType: DOMfileType[0][0].value,
@@ -3058,7 +3095,7 @@ kshf.Browser.prototype = {
         var me=this;
         var fileName=this.source.dirPath+sheet.name+".json";
         $.ajax({
-            url: fileName,
+            url: fileName+"?dl=0",
             type: "GET",
             async: (this.source.callback===undefined)?true:false,
             dataType: "json",
@@ -3175,7 +3212,7 @@ kshf.Browser.prototype = {
         },this);
 
         // Create a summary for each existing column in the data
-        for(var column in this.getPrimaryItems()[0].data){
+        for(var column in this.items[0].data){
             if(typeof(column)==="string") this.createSummary(column);
         }
 
@@ -3609,6 +3646,11 @@ kshf.Browser.prototype = {
     /** -- */
     clearFilters_All: function(force){
         var me=this;
+        if(this.skipSortingFacet){
+            // you can now sort the last filtered summary, attention is no longer there.
+            this.skipSortingFacet.dirtySort = false;
+            this.skipSortingFacet.DOM.root.attr("refreshSorting",false);
+        }
         // clear all registered filters
         this.filters.forEach(function(filter){
             filter.clearFilter(false,false,false);
@@ -3982,9 +4024,10 @@ kshf.Summary_Base.prototype = {
         this.DOM = {};
         this.DOM.inited = false;
 
-        this.items = this.browser.getPrimaryItems();
+        this.items = this.browser.items;
         if(this.items===undefined||this.items===null||this.items.length===0){
-            alert("Fck");
+            alert("Error: Browser.items is not defined...");
+            return;
         }
 
         this.subFacets = [];
@@ -4083,6 +4126,9 @@ kshf.Summary_Base.prototype = {
     },
     /** -- */
     uniqueCategories: function(){
+        if(this.browser && this.browser.items[0].idIndex===this.summaryTitle){
+            return true;
+        }
         return false;
     },
     /** -- */
@@ -4546,8 +4592,7 @@ var Summary_Categorical_functions = {
     /** -- */
     getHeight: function(){
         if(!this.hasCategories() || this.collapsed) return this.getHeight_Header();
-        // Note: I don't know why I need -2 to match real dom height.
-        return this.getHeight_Header() + this.getHeight_Content()-2;
+        return this.getHeight_Header() + this.getHeight_Content();
     },
     /** -- */
     getHeight_Header: function(){
@@ -6573,6 +6618,12 @@ var Summary_Interval_functions = {
 
         if(!this.aggr_initialized) return;
 
+        if(this.uniqueCategories()){
+            this.DOM.nugget.select(".nuggetInfo").html("<span class='fa fa-tag'></span><br>Unique");
+            nuggetChart.style("display",'none');
+            return;
+        }
+
         var maxAggregate_Total = this.getMaxAggr_Total();
 
         if(this.intervalRange.min===this.intervalRange.max){
@@ -6644,10 +6695,7 @@ var Summary_Interval_functions = {
     },
     /** -- */
     getHeight_Header: function(){
-        if(this._height_header===undefined) {
-            this._height_header = this.DOM.headerGroup[0][0].offsetHeight;
-        }
-        return this._height_header;
+        return this.DOM.headerGroup[0][0].offsetHeight;
     },
     /** -- */
     getHeight_Extra: function(){
@@ -7054,7 +7102,8 @@ var Summary_Interval_functions = {
             var filterId = this.summaryFilter.id;
 
             var itemV = function(item){
-                if(item.isWanted) return item.mappedDataCache[filterId].v;
+                // if(item.isWanted)  // Include all items - Aggregate also shows the "total" viz
+                    return item.mappedDataCache[filterId].v;
             };
             if(this.zoomed===false){
                 itemV = this.itemV;
@@ -7088,6 +7137,8 @@ var Summary_Interval_functions = {
             if(this.DOM.root){
                 this.insertVizDOM();
             }
+
+            if(this.showPercentile) this.updatePercentiles();
         }
         if(this.DOM.root){
             if(this.DOM.aggr_Group===undefined){
@@ -8107,7 +8158,7 @@ var Summary_Interval_functions = {
         this.updateAggregate_Active();
         this.refreshMeasureLabel();
         this.updateBarPreviewScale2Active();
-        if(this.showPercentile) this.updateQuantiles();
+        if(this.showPercentile) this.updatePercentiles();
     },
     /** -- */
     updateBarPreviewScale2Active: function(){
@@ -8144,7 +8195,7 @@ var Summary_Interval_functions = {
         if(this.inBrowser()) this.DOM.selectedItemValue.style("display",null);
     },
     /** -- */
-    updateQuantiles: function(){
+    updatePercentiles: function(){
         var me=this;
         // get active values into an array
         // the items are already sorted by their numeric value, it's just a linear pass.
